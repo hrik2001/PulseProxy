@@ -1,2 +1,3 @@
 # PulseProxy
-Another stupid readme
+To access a site type </br>
+`<proxy url>/<site_name>`
