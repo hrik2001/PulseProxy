@@ -1,7 +1,8 @@
-from flask import Flask , render_template , request , Response , url_for , make_response
+from flask import Flask , request , Response , url_for , make_response
 from requests import get
-from werkzeug.datastructures import Headers
 import re
+import mimetypes
+
 
 #TODO:
 #1) Make a basic proxy that at least shows basic html files (but not images)
@@ -12,7 +13,8 @@ import re
 #	2.1) by reading the MIMETYPE from content-type header of the response and using the function flask.send_file
 #	2.2) a function which will every link be it local or global into proxy equivalent link so traffic always passes through proxy
 #	2.3) use a virtual file system to relay files, file should be of certain size
-#3) Handle https requests
+#		2.3.1)Support for integration temporary file system and flask gone :(
+#3) Handle big files by streaming data from requests then streaming back to user
 #4) Make proxy load and update cookies in the User's computer
 
 app = Flask(__name__)
@@ -26,6 +28,15 @@ CSS_REGEX = re.compile(r'(url\(["\']?)/')
 
 REGEXES = [HTML_REGEX, JQUERY_REGEX, JS_LOCATION_REGEX, CSS_REGEX]
 
+def filename(url):
+	url = url.split("/")
+	if url[len(url)-1] == "":
+		url = url[len(url)-2]
+	else:
+		url = url[len(url)-1]
+	return url
+
+
 @app.route("/")
 def home():
 	return "PulseProxy"
@@ -37,7 +48,7 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 	'''
 	TODO:
 	Request library shouldnt be used later, rather a mechanism to forward GET and POST requests
-	-for now only static GET requests work 
+	-for now only static GET requests work
 	'''
 	print("USER ASKED FOR " + f'https://{site}/{directory}')
 	#printing stuff for debugging, messy but works for fast dev
@@ -47,46 +58,57 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 	#request.headers is of type 'werkzeug.datastructures.EnvironHeaders' so we need to convert to a dictionary
 	request_headers = {}
 	for i in request.headers:
-		request_headers[i[0]] = i[1]
+		#BUG:
+		#Sending all requests raises some exceptions in connection
+		#bibi21000 at https://bibi21000.github.io/janitoo_manager_proxy/_modules/janitoo_manager_proxy/views.html
+		#Whitlisted these headers, therefore I am too, Will look into why thats happening later
+		if i[0] in ["Cookie", "Referer", "X-Csrf-Token"]:
+			request_headers[i[0]] = i[1]
+	print(request_headers)
 
 	if request.method in ["POST" , "PUT"]:
 		form = request.form
 	else:
 		form = None
 
-	#conn = get(f'https://{site}/{directory}', headers = request_headers)
-	conn = get(f'https://{site}/{directory}')
-	content = b"<h1>PulseProxy</h1>"+conn.content
+	conn = get(f'https://{site}/{directory}', headers = request_headers)
+	#conn = get(f'https://{site}/{directory}')
+	content = conn.content
 
 
 	root = url_for(".proxy", site=site)
-	root = root[0:len(root)-1]
+	#root = root[0:len(root)-1]
 
 
-	for regex in REGEXES:
-		try:
-			content = regex.sub(r'\1%s' % root, content.decode().strip()).encode().strip()
-		except:
-			content = regex.sub(r'\1%s' % root, str(content)).encode().strip()
+	if "location" in conn.headers:
+		url = conn.headers["location"]
+		if url.startswith("https://"):
+			url = url[8:]
+		elif url.startswith("https://"):
+			url = url[7:]
 
-	response_headers = Headers()
-	for key , value in conn.headers.items():
-		response_headers.add(key , value)
-	#answer = Response(response=content , status=conn.status_code , headers=response_headers , content_type=response_headers["content-type"])
-	print(response_headers["content-type"] + f"  for https://{site}/{directory}")
+		if url[0]=="/":
+			url = site + url
+		else:
+			url = "/"+url
+		conn.headers["location"] = url
+
+	if "text" in mimetypes.guess_type(directory)[0]:
+		for regex in REGEXES:
+			try:
+				content = regex.sub(r'\1%s' % root, content.decode().strip()).encode().strip()
+			except:
+				content = regex.sub(r'\1%s' % root, str(content)).encode().strip()
+
 	answer = make_response(content)
-
-	#TODO:
-	#come up with how to reply with headers
-	#below code not working
-	'''
-	print(conn.headers)
 	for key, value in conn.headers.items():
-		answer.headers[key] = value
-	'''
+		#Once again, only few whitelisted headers work or else other headers bug it up, these ones were found by hit and trial
+		if key in ["Date" , "set-cookie","content-length", "connection", "content-type" , "location"]:
+			answer.headers[key] = value
+
 	return answer
-	#return(content , conn.status_code , conn.headers)
-	
+
+
 
 
 if __name__ == "__main__":
