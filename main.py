@@ -2,6 +2,7 @@ from flask import Flask , request , Response , url_for , make_response
 from requests import get
 import re
 import mimetypes
+from urllib.parse import urlparse
 
 
 #TODO:
@@ -73,7 +74,14 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 	else:
 		form = None
 
-	conn = get(f'https://{site}/{directory}', headers = request_headers , data = form)
+	try:
+		conn = get(f'https://{site}/{directory}', headers = request_headers , data = form)
+	except:
+		link = urlparse(request.headers["Referer"]).path #check Referer or referer
+		print("LINK:")
+		link = link[1:len(link)-1]
+		print(link)
+		conn = get(f'https://{link}/{site}', headers = request_headers , data = form)
 	#conn = get(f'https://{site}/{directory}')
 	
 
@@ -96,7 +104,13 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 	#if the link is a webpage
 	if "text" in conn.headers['content-type']:		
 		content = conn.content
-		root = url_for(".proxy", site=site )	
+		root = url_for(".proxy", site=site )
+		'''
+		#TODO:
+		#for some sites root should be trimmed, look into this later
+		if root[len(root)-1] == "/":
+			root = root[0:len(root)-2]
+		'''	
 		for regex in REGEXES:
 			try:
 				content = regex.sub(r'\1%s' % root, content.decode().strip()).encode().strip()
