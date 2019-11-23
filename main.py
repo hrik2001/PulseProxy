@@ -1,7 +1,6 @@
 from flask import Flask , request , Response , url_for , make_response
 from requests import get
 import re
-import mimetypes
 from urllib.parse import urlparse
 
 
@@ -51,6 +50,7 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 	Request library shouldnt be used later, rather a mechanism to forward GET and POST requests
 	-for now only static GET requests work
 	'''
+	print("\n" + "-"*24)
 	print("USER ASKED FOR " + f'https://{site}/{directory}')
 	#printing stuff for debugging, messy but works for fast dev
 
@@ -75,13 +75,22 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 		form = None
 
 	try:
-		conn = get(f'https://{site}/{directory}', headers = request_headers , data = form)
+		url = f'{site}/{directory}'
+		if "//" in url:
+			url = url.replace("//" , "/")
+		conn = get(f'https://{url}', headers = request_headers , data = form)
+		print("JUST CONNECTED TO : " + f'https://{url}')
+		print("\n" + "-"*24)
 	except:
 		link = urlparse(request.headers["Referer"]).path #check Referer or referer
-		print("LINK:")
 		link = link[1:len(link)-1]
 		print(link)
-		conn = get(f'https://{link}/{site}', headers = request_headers , data = form)
+		url = f'{link}/{site}'
+		if "//" in url:
+			url = url.replace("//" , "/")
+		conn = get(f'https://{url}', headers = request_headers , data = form)
+		print("JUST CONNECTED TO : " + f'https://{url}')
+		print("\n" + "-"*24)
 	#conn = get(f'https://{site}/{directory}')
 	
 
@@ -105,6 +114,8 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 	if "text" in conn.headers['content-type']:		
 		content = conn.content
 		root = url_for(".proxy", site=site )
+		print("ROOT:")		
+		print(root)
 		'''
 		#TODO:
 		#for some sites root should be trimmed, look into this later
