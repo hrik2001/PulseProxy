@@ -56,6 +56,7 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 	####manipulating request part#####
 
 	#request.headers is of type 'werkzeug.datastructures.EnvironHeaders' so we need to convert to a dictionary
+	#The class behaves kind of like a dictionary so we are in luck.	
 	request_headers = {}
 	for i in request.headers:
 		#BUG:
@@ -64,22 +65,19 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 		#Whitlisted these headers, therefore I am too, Will look into why thats happening later
 		if i[0] in ["Cookie", "Referer", "X-Csrf-Token"]:
 			request_headers[i[0]] = i[1]
-	print(request_headers)
+	print("REQUEST HEADERS::")
+	print(request.headers)
 
 	if request.method in ["POST" , "PUT"]:
 		form = request.form
 	else:
 		form = None
 
-	conn = get(f'https://{site}/{directory}', headers = request_headers)
+	conn = get(f'https://{site}/{directory}', headers = request_headers , data = form)
 	#conn = get(f'https://{site}/{directory}')
-	content = conn.content
+	
 
-
-	root = url_for(".proxy", site=site)
-	#root = root[0:len(root)-1]
-
-
+	#to prevent redirection
 	if "location" in conn.headers:
 		url = conn.headers["location"]
 		if url.startswith("https://"):
@@ -92,21 +90,31 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 		else:
 			url = "/"+url
 		conn.headers["location"] = url
-
-	if "text" in mimetypes.guess_type(directory)[0]:
+	
+	
+	
+	#if the link is a webpage
+	if "text" in conn.headers['content-type']:		
+		content = conn.content
+		root = url_for(".proxy", site=site )	
 		for regex in REGEXES:
 			try:
 				content = regex.sub(r'\1%s' % root, content.decode().strip()).encode().strip()
 			except:
 				content = regex.sub(r'\1%s' % root, str(content)).encode().strip()
 
-	answer = make_response(content)
-	for key, value in conn.headers.items():
-		#Once again, only few whitelisted headers work or else other headers bug it up, these ones were found by hit and trial
-		if key in ["Date" , "set-cookie","content-length", "connection", "content-type" , "location"]:
-			answer.headers[key] = value
+		answer = make_response(content)
+		for key, value in conn.headers.items():
+			#Once again, only few whitelisted headers work or else other headers bug it up, these ones were found by hit and trial
+			if key in ["Date" , "set-cookie","content-length", "connection", "content-type" , "location"]:
+				answer.headers[key] = value
 
-	return answer
+		return answer
+	else:
+		#if the link serves multimedia file
+		#TODO:
+		#come up with an ideal chunk size
+		return Response(conn.iter_content(chunk_size = 200*1024) , content_type = conn.headers['content-type'])
 
 
 
