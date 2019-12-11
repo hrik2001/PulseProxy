@@ -73,19 +73,20 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 		form = request.form
 	else:
 		form = None
-
+	print("FORM::")
+	print(form)
 	try:
 		url = f'{site}/{directory}'
 		if "//" in url:
 			url = url.replace("//" , "/")
-		conn = get(f'https://{url}', headers = request_headers , data = form)
+		conn = get(f'https://{url}', headers = request_headers , data = form , cookies = request.cookies)
 		print("JUST CONNECTED TO : " + f'https://{url}')
 		print("\n" + "-"*24)
 	except:
 		link = urlparse(request.headers["Referer"]).path #check Referer or referer
 		link = link[1:len(link)-1]
 		print(link)
-		url = f'{link}/{site}'
+		url = f'{link}/{site}/{directory}'
 		if "//" in url:
 			url = url.replace("//" , "/")
 		conn = get(f'https://{url}', headers = request_headers , data = form)
@@ -116,6 +117,12 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 		root = url_for(".proxy", site=site )
 		print("ROOT:")		
 		print(root)
+		print("URL:")
+		print(url)
+		print("NEW ROOT:")
+		root2 = "/" + urlparse("https://"+url).netloc + "/"
+		print(root2)
+		root = root2
 		'''
 		#TODO:
 		#for some sites root should be trimmed, look into this later
@@ -147,3 +154,4 @@ def proxy(site , directory = "" , methods = ["GET" , "POST", "PUT", "DELETE"]):
 if __name__ == "__main__":
 	app.debug = True
 	app.run()
+
